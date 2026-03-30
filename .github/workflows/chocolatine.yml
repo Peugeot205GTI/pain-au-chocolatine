@@ -2,12 +2,16 @@ name: Chocolatine
 
 on:
   push:
+    branches-ignore:
+      - 'no-ga/**'
   pull_request:
+    branches-ignore:
+      - 'no-ga/**'
     types: [opened]
 
 env:
   MIRROR_SSH_URL: "git@github.com:EpitechPGE1-2025/G-DOP-200-NCE-2-1-chocolatine-15.git"
-  EXECUTABLES: "mysh"
+  EXECUTABLES: "test"
 
 jobs:
   guard_conditions:
