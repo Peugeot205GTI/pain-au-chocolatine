@@ -1,0 +1,132 @@
+name: Chocolatine
+
+on:
+  push:
+  pull_request:
+    types: [opened]
+
+env:
+  MIRROR_SSH_URL: "git@github.com:EpitechPGE1-2025/G-DOP-200-NCE-2-1-chocolatine-15.git"
+  EXECUTABLES: "mysh"
+
+jobs:
+  guard_conditions:
+    name: Evaluate workflow conditions
+    runs-on: ubuntu-latest
+    if: "!startsWith(github.head_ref || github.ref_name, 'no-ga/')"
+    outputs:
+      should_run: ${{ steps.evaluate.outputs.should_run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 1
+
+      - name: Evaluate mirror repository condition
+        id: evaluate
+        run: |
+          set -euo pipefail
+          mirror_repo="$(echo "$MIRROR_SSH_URL" | sed -E 's#.*[:/]([^/:]+/[^/]+)(\\.git)?$#\1#')"
+
+          if [ "$mirror_repo" = "$GITHUB_REPOSITORY" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  check_compilation_and_coding_style:
+    name: Check compilation and coding style
+    runs-on: ubuntu-latest
+    needs: guard_conditions
+    if: needs.guard_conditions.outputs.should_run == 'true'
+    container:
+      image: epitechcontent/epitest-docker
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 1
+
+      - name: Run coding style checker
+        run: |
+          banana-check-repo > coding-style-output.txt 2>&1 || true
+
+      - name: Build project
+        timeout-minutes: 2
+        env:
+          CC: epiclang
+        run: make
+
+      - name: Display coding style annotations
+        id: coding_style_annotations
+        run: |
+          set -euo pipefail
+          report_file=""
+
+          if [ -f coding-style-reports.log ]; then
+            report_file="coding-style-reports.log"
+          elif [ -f coding-style-output.txt ]; then
+            report_file="coding-style-output.txt"
+          fi
+
+          count=0
+
+          if [ -n "$report_file" ] && [ -s "$report_file" ]; then
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+
+              if [[ "$line" =~ ^([^:]+):([0-9]+):([0-9]+):[[:space:]]*(.*)$ ]]; then
+                file="${BASH_REMATCH[1]}"
+                line_no="${BASH_REMATCH[2]}"
+                col_no="${BASH_REMATCH[3]}"
+                message="${BASH_REMATCH[4]}"
+                echo "::error file=${file},line=${line_no},col=${col_no},title=Coding style::${message}"
+                count=$((count + 1))
+              elif [[ "$line" =~ ^([^:]+):([0-9]+):[[:space:]]*(.*)$ ]]; then
+                file="${BASH_REMATCH[1]}"
+                line_no="${BASH_REMATCH[2]}"
+                message="${BASH_REMATCH[3]}"
+                echo "::error file=${file},line=${line_no},title=Coding style::${message}"
+                count=$((count + 1))
+              fi
+            done < "$report_file"
+          fi
+
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on coding style errors
+        run: |
+          if [ "${{ steps.coding_style_annotations.outputs.count }}" -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Clean build artifacts
+        run: make clean
+
+      - name: Check expected executables
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra executables <<< "$EXECUTABLES"
+          missing=0
+
+          for executable in "${executables[@]}"; do
+            trimmed="$(echo "$executable" | xargs)"
+            [ -z "$trimmed" ] && continue
+
+            if [ ! -f "$trimmed" ]; then
+              echo "::error file=${trimmed},title=Missing executable::Expected executable '${trimmed}' was not found"
+              missing=1
+              continue
+            fi
+
+            if [ ! -x "$trimmed" ]; then
+              echo "::error file=${trimmed},title=Non-executable file::Expected executable '${trimmed}' is not executable"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
