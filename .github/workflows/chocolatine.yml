@@ -20,6 +20,9 @@ jobs:
     if: "!startsWith(github.head_ref || github.ref_name, 'no-ga/')"
     outputs:
       should_run: ${{ steps.evaluate.outputs.should_run }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -46,6 +49,9 @@ jobs:
     if: needs.guard_conditions.outputs.should_run == 'true'
     container:
       image: epitechcontent/epitest-docker
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -134,3 +140,42 @@ jobs:
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
+
+  run_tests:
+    name: Run tests
+    runs-on: ubuntu-latest
+    needs: [guard_conditions, check_compilation_and_coding_style]
+    if: needs.guard_conditions.outputs.should_run == 'true'
+    container:
+      image: epitechcontent/epitest-docker
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 1
+
+      - name: Run tests
+        timeout-minutes: 2
+        run: make tests_run
+
+  push_to_mirror:
+    name: Push to mirror repository
+    runs-on: ubuntu-latest
+    needs: [guard_conditions, run_tests]
+    if: github.event_name == 'push' && needs.guard_conditions.outputs.should_run == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 1
+
+      - name: Mirror repository
+        uses: pixta-dev/repository-mirroring-action@v1
+        with:
+          target_repo_url: ${{ env.MIRROR_SSH_URL }}
+          ssh_private_key: ${{ secrets.GIT_SSH_PRIVATE_KEY }}
