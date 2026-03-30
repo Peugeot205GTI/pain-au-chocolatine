@@ -15,4 +15,4 @@ tests/tests
 .vscode/
 tests_pipe_redirection.txt
 unit_tests
-tests
+test
