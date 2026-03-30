@@ -30,7 +30,7 @@ jobs:
       - name: Evaluate mirror repository condition
         id: evaluate
         run: |
-          set -euo pipefail
+          set -eu
           mirror_repo="$(echo "$MIRROR_SSH_URL" | sed -E 's#.*[:/]([^/:]+/[^/]+)(\\.git)?$#\1#')"
 
           if [ "$mirror_repo" = "$GITHUB_REPOSITORY" ]; then
@@ -66,7 +66,7 @@ jobs:
       - name: Display coding style annotations
         id: coding_style_annotations
         run: |
-          set -euo pipefail
+          set -eu
           report_file=""
 
           if [ -f coding-style-reports.log ]; then
@@ -111,7 +111,7 @@ jobs:
 
       - name: Check expected executables
         run: |
-          set -euo pipefail
+          set -eu
           IFS=',' read -ra executables <<< "$EXECUTABLES"
           missing=0
 
