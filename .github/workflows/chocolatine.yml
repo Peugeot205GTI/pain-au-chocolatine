@@ -172,7 +172,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 1
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Mirror repository
         uses: pixta-dev/repository-mirroring-action@v1
